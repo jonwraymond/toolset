@@ -41,6 +41,28 @@ func (m *mockAdapter) SupportsFeature(f tooladapter.SchemaFeature) bool {
 	return m.supportedFeatures[f]
 }
 
+// selectiveErrorAdapter allows custom FromCanonical behavior for testing
+type selectiveErrorAdapter struct {
+	name          string
+	fromCanonical func(*tooladapter.CanonicalTool) (any, error)
+}
+
+func (s *selectiveErrorAdapter) Name() string {
+	return s.name
+}
+
+func (s *selectiveErrorAdapter) ToCanonical(raw any) (*tooladapter.CanonicalTool, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (s *selectiveErrorAdapter) FromCanonical(tool *tooladapter.CanonicalTool) (any, error) {
+	return s.fromCanonical(tool)
+}
+
+func (s *selectiveErrorAdapter) SupportsFeature(f tooladapter.SchemaFeature) bool {
+	return true
+}
+
 func TestExposure_Export(t *testing.T) {
 	t.Run("export returns slice of protocol tools", func(t *testing.T) {
 		ts := New("test")
@@ -103,6 +125,62 @@ func TestExposure_Export(t *testing.T) {
 }
 
 func TestExposure_ExportWithWarnings(t *testing.T) {
+	t.Run("surfaces conversion errors", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(makeTool("ns", "a", nil))
+		ts.Add(makeTool("ns", "b", nil))
+
+		adapter := &mockAdapter{
+			name:             "mock",
+			fromCanonicalErr: errors.New("conversion failed"),
+		}
+		exp := NewExposure(ts, adapter)
+
+		result, _, errs := exp.ExportWithWarnings()
+
+		// All tools should fail to convert
+		if len(result) != 0 {
+			t.Errorf("len(result) = %d, want 0 (all conversions failed)", len(result))
+		}
+
+		// Should have 2 errors (one per tool)
+		if len(errs) != 2 {
+			t.Errorf("len(errs) = %d, want 2", len(errs))
+		}
+	})
+
+	t.Run("returns partial results with errors", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(makeTool("ns", "a", nil))
+		ts.Add(makeTool("ns", "b", nil))
+
+		// Adapter that fails only for specific tools
+		callCount := 0
+		adapter := &selectiveErrorAdapter{
+			name: "mock",
+			fromCanonical: func(tool *tooladapter.CanonicalTool) (any, error) {
+				callCount++
+				if tool.Name == "a" {
+					return nil, errors.New("failed for a")
+				}
+				return map[string]any{"name": tool.Name}, nil
+			},
+		}
+		exp := NewExposure(ts, adapter)
+
+		result, _, errs := exp.ExportWithWarnings()
+
+		// Should have 1 successful conversion
+		if len(result) != 1 {
+			t.Errorf("len(result) = %d, want 1", len(result))
+		}
+
+		// Should have 1 error
+		if len(errs) != 1 {
+			t.Errorf("len(errs) = %d, want 1", len(errs))
+		}
+	})
+
 	t.Run("returns warnings for unsupported features", func(t *testing.T) {
 		ts := New("test")
 		ts.Add(&tooladapter.CanonicalTool{
@@ -122,7 +200,7 @@ func TestExposure_ExportWithWarnings(t *testing.T) {
 		}
 		exp := NewExposure(ts, adapter)
 
-		_, warnings := exp.ExportWithWarnings()
+		_, warnings, _ := exp.ExportWithWarnings()
 		if len(warnings) == 0 {
 			t.Error("Expected warning for unsupported pattern feature")
 		}
@@ -159,7 +237,7 @@ func TestExposure_ExportWithWarnings(t *testing.T) {
 		}
 		exp := NewExposure(ts, adapter)
 
-		_, warnings := exp.ExportWithWarnings()
+		_, warnings, _ := exp.ExportWithWarnings()
 		if len(warnings) == 0 {
 			t.Fatal("Expected warning")
 		}
@@ -202,7 +280,7 @@ func TestExposure_EmptyToolset(t *testing.T) {
 			t.Errorf("len(Export()) = %d, want 0", len(result))
 		}
 
-		resultW, warnings := exp.ExportWithWarnings()
+		resultW, warnings, _ := exp.ExportWithWarnings()
 		if len(resultW) != 0 {
 			t.Errorf("len(ExportWithWarnings result) = %d, want 0", len(resultW))
 		}
@@ -240,7 +318,7 @@ func TestExposure_NestedSchema(t *testing.T) {
 		}
 		exp := NewExposure(ts, adapter)
 
-		_, warnings := exp.ExportWithWarnings()
+		_, warnings, _ := exp.ExportWithWarnings()
 		if len(warnings) == 0 {
 			t.Error("Should detect pattern in nested Items")
 		}
@@ -271,7 +349,7 @@ func TestExposure_NestedSchema(t *testing.T) {
 		}
 		exp := NewExposure(ts, adapter)
 
-		_, warnings := exp.ExportWithWarnings()
+		_, warnings, _ := exp.ExportWithWarnings()
 
 		foundFormat := false
 		foundDefs := false
@@ -325,7 +403,7 @@ func TestExposure_Combinators(t *testing.T) {
 		}
 		exp := NewExposure(ts, adapter)
 
-		_, warnings := exp.ExportWithWarnings()
+		_, warnings, _ := exp.ExportWithWarnings()
 
 		features := make(map[tooladapter.SchemaFeature]bool)
 		for _, w := range warnings {
@@ -371,7 +449,7 @@ func TestExposure_Combinators(t *testing.T) {
 		}
 		exp := NewExposure(ts, adapter)
 
-		_, warnings := exp.ExportWithWarnings()
+		_, warnings, _ := exp.ExportWithWarnings()
 
 		found := false
 		for _, w := range warnings {
@@ -410,7 +488,7 @@ func TestExposure_RefInNested(t *testing.T) {
 		}
 		exp := NewExposure(ts, adapter)
 
-		_, warnings := exp.ExportWithWarnings()
+		_, warnings, _ := exp.ExportWithWarnings()
 
 		found := false
 		for _, w := range warnings {

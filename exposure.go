@@ -34,15 +34,18 @@ func (e *Exposure) Export() ([]any, error) {
 	return result, nil
 }
 
-// ExportWithWarnings converts tools and returns feature loss warnings.
-func (e *Exposure) ExportWithWarnings() ([]any, []tooladapter.FeatureLossWarning) {
+// ExportWithWarnings converts tools and returns feature loss warnings and conversion errors.
+// Unlike Export, this method continues on conversion errors and collects them for reporting.
+// Callers should check the errors slice to detect tools that failed to convert.
+func (e *Exposure) ExportWithWarnings() ([]any, []tooladapter.FeatureLossWarning, []error) {
 	if e.adapter == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	tools := e.toolset.Tools()
 	result := make([]any, 0, len(tools))
 	var warnings []tooladapter.FeatureLossWarning
+	var errs []error
 
 	for _, t := range tools {
 		// Detect features used by this tool
@@ -62,11 +65,29 @@ func (e *Exposure) ExportWithWarnings() ([]any, []tooladapter.FeatureLossWarning
 		// Convert
 		converted, err := e.adapter.FromCanonical(t)
 		if err != nil {
-			continue // skip on error
+			errs = append(errs, &ConversionError{
+				ToolID: t.ID(),
+				Cause:  err,
+			})
+			continue
 		}
 		result = append(result, converted)
 	}
-	return result, warnings
+	return result, warnings, errs
+}
+
+// ConversionError represents a tool that failed to convert.
+type ConversionError struct {
+	ToolID string
+	Cause  error
+}
+
+func (e *ConversionError) Error() string {
+	return "failed to convert tool " + e.ToolID + ": " + e.Cause.Error()
+}
+
+func (e *ConversionError) Unwrap() error {
+	return e.Cause
 }
 
 // detectFeatures recursively walks the schema to find all used features.
