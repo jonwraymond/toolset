@@ -53,10 +53,14 @@ At this point, `safe` contains only the `mcp:search` tool.
 import "github.com/jonwraymond/tooladapter/adapters"
 
 exposure := toolset.NewExposure(safe, adapters.NewMCPAdapter())
-exports, warnings := exposure.ExportWithWarnings()
+exports, warnings, errs := exposure.ExportWithWarnings()
+if len(errs) > 0 {
+    // handle conversion errors (tool IDs included)
+}
 ```
 
-If the tools used unsupported schema features, you would see warnings here.
+If the tools used unsupported schema features, you would see warnings here. If a
+tool fails conversion, it will be omitted from `exports` and reported in `errs`.
 
 ## Flow Diagram
 

@@ -9,9 +9,9 @@ import (
 
 // mockAdapter implements tooladapter.Adapter for testing
 type mockAdapter struct {
-	name             string
+	name              string
 	supportedFeatures map[tooladapter.SchemaFeature]bool
-	fromCanonicalErr error
+	fromCanonicalErr  error
 }
 
 func (m *mockAdapter) Name() string {
@@ -246,8 +246,40 @@ func TestExposure_ExportWithWarnings(t *testing.T) {
 		if w.Feature != tooladapter.FeatureFormat {
 			t.Errorf("Feature = %v, want FeatureFormat", w.Feature)
 		}
+		if w.FromAdapter != "mcp" {
+			t.Errorf("FromAdapter = %q, want 'mcp'", w.FromAdapter)
+		}
 		if w.ToAdapter != "openai" {
 			t.Errorf("ToAdapter = %q, want 'openai'", w.ToAdapter)
+		}
+	})
+
+	t.Run("source format fallback to canonical", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(&tooladapter.CanonicalTool{
+			Name:      "tool",
+			Namespace: "ns",
+			InputSchema: &tooladapter.JSONSchema{
+				Type:    "object",
+				Pattern: "^[a-z]+$",
+			},
+		})
+
+		adapter := &mockAdapter{
+			name: "mock",
+			supportedFeatures: map[tooladapter.SchemaFeature]bool{
+				tooladapter.FeaturePattern: false,
+			},
+		}
+		exp := NewExposure(ts, adapter)
+
+		_, warnings, _ := exp.ExportWithWarnings()
+		if len(warnings) == 0 {
+			t.Fatal("Expected warning")
+		}
+
+		if warnings[0].FromAdapter != "canonical" {
+			t.Errorf("FromAdapter = %q, want 'canonical'", warnings[0].FromAdapter)
 		}
 	})
 }
@@ -262,6 +294,21 @@ func TestExposure_NilAdapter(t *testing.T) {
 		_, err := exp.Export()
 		if err == nil {
 			t.Error("Export() should return error for nil adapter")
+		}
+	})
+
+	t.Run("export with warnings returns error slice for nil adapter", func(t *testing.T) {
+		ts := New("test")
+		ts.Add(makeTool("ns", "a", nil))
+
+		exp := NewExposure(ts, nil)
+
+		_, _, errs := exp.ExportWithWarnings()
+		if len(errs) != 1 {
+			t.Fatalf("len(errs) = %d, want 1", len(errs))
+		}
+		if errs[0] == nil || errs[0].Error() != "adapter is nil" {
+			t.Errorf("unexpected error: %v", errs[0])
 		}
 	})
 }
@@ -280,12 +327,15 @@ func TestExposure_EmptyToolset(t *testing.T) {
 			t.Errorf("len(Export()) = %d, want 0", len(result))
 		}
 
-		resultW, warnings, _ := exp.ExportWithWarnings()
+		resultW, warnings, errs := exp.ExportWithWarnings()
 		if len(resultW) != 0 {
 			t.Errorf("len(ExportWithWarnings result) = %d, want 0", len(resultW))
 		}
 		if len(warnings) != 0 {
 			t.Errorf("len(warnings) = %d, want 0", len(warnings))
+		}
+		if len(errs) != 0 {
+			t.Errorf("len(errs) = %d, want 0", len(errs))
 		}
 	})
 }
@@ -324,7 +374,7 @@ func TestExposure_NestedSchema(t *testing.T) {
 		}
 	})
 
-	t.Run("detectFeatures finds features at all depths", func(t *testing.T) {
+	t.Run("feature loss detection finds features at all depths", func(t *testing.T) {
 		ts := New("test")
 		ts.Add(&tooladapter.CanonicalTool{
 			Name:      "deep",
@@ -424,7 +474,7 @@ func TestExposure_Combinators(t *testing.T) {
 		}
 	})
 
-	t.Run("detectFeatures walks combinator branches", func(t *testing.T) {
+	t.Run("feature loss detection walks combinator branches", func(t *testing.T) {
 		ts := New("test")
 		ts.Add(&tooladapter.CanonicalTool{
 			Name:      "nested-combinator",

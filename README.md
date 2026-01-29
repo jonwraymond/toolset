@@ -45,9 +45,17 @@ func main() {
 
     // Export to MCP format
     exposure := toolset.NewExposure(filtered, mcpAdapter)
-    mcpTools, warnings := exposure.ExportWithWarnings()
+    mcpTools, warnings, errs := exposure.ExportWithWarnings()
+    if len(errs) > 0 {
+        panic(errs[0])
+    }
 }
 ```
+
+Notes:
+- `ExportWithWarnings()` returns **warnings** for feature loss and **errors** for
+  tools that failed conversion. The result slice only contains successful
+  conversions.
 
 ## Stack Position
 

@@ -90,7 +90,10 @@ safeSet, err := builder.
 
 ```go
 exposure := toolset.NewExposure(safeSet, adapters.NewMCPAdapter())
-exports, warnings := exposure.ExportWithWarnings()
+exports, warnings, errs := exposure.ExportWithWarnings()
+if len(errs) > 0 {
+    // handle conversion errors (tool IDs are included in the error message)
+}
 ```
 
 ## Versioning

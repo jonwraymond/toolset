@@ -58,6 +58,7 @@ Exposure uses `tooladapter.Adapter` to export toolsets:
 
 - Conversion is **read-only**; no mutation to canonical tools.
 - Feature loss warnings are aggregated from the adapter.
+- Conversion errors are surfaced via `ExportWithWarnings()` as a `[]error`.
 - Exposure returns `[]any` for protocol-specific tool shapes.
 
 ## Integration with toolindex
@@ -78,6 +79,7 @@ This keeps toolset independent of execution (`toolrun`) or docs (`tooldocs`).
 
 - Builder returns errors for missing sources or invalid inputs.
 - Filters and policies are pure functions and should not panic.
+- `ExportWithWarnings()` returns conversion errors (tool ID included in the error).
 
 ## Performance
 

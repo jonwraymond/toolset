@@ -39,7 +39,7 @@ func (e *Exposure) Export() ([]any, error) {
 // Callers should check the errors slice to detect tools that failed to convert.
 func (e *Exposure) ExportWithWarnings() ([]any, []tooladapter.FeatureLossWarning, []error) {
 	if e.adapter == nil {
-		return nil, nil, nil
+		return nil, nil, []error{errors.New("adapter is nil")}
 	}
 
 	tools := e.toolset.Tools()
@@ -48,19 +48,13 @@ func (e *Exposure) ExportWithWarnings() ([]any, []tooladapter.FeatureLossWarning
 	var errs []error
 
 	for _, t := range tools {
-		// Detect features used by this tool
-		features := detectFeatures(t)
-
-		// Check for unsupported features
-		for _, f := range features {
-			if !e.adapter.SupportsFeature(f) {
-				warnings = append(warnings, tooladapter.FeatureLossWarning{
-					Feature:     f,
-					FromAdapter: t.SourceFormat,
-					ToAdapter:   e.adapter.Name(),
-				})
-			}
+		sourceName := t.SourceFormat
+		if sourceName == "" {
+			sourceName = "canonical"
 		}
+
+		warnings = append(warnings, detectSchemaFeatureLoss(t.InputSchema, sourceName, e.adapter)...)
+		warnings = append(warnings, detectSchemaFeatureLoss(t.OutputSchema, sourceName, e.adapter)...)
 
 		// Convert
 		converted, err := e.adapter.FromCanonical(t)
@@ -90,104 +84,67 @@ func (e *ConversionError) Unwrap() error {
 	return e.Cause
 }
 
-// detectFeatures recursively walks the schema to find all used features.
-func detectFeatures(t *tooladapter.CanonicalTool) []tooladapter.SchemaFeature {
-	var features []tooladapter.SchemaFeature
-	seen := make(map[tooladapter.SchemaFeature]bool)
-
-	var walk func(s *tooladapter.JSONSchema)
-	walk = func(s *tooladapter.JSONSchema) {
-		if s == nil {
-			return
-		}
-
-		// Check each feature field
-		if s.Ref != "" && !seen[tooladapter.FeatureRef] {
-			features = append(features, tooladapter.FeatureRef)
-			seen[tooladapter.FeatureRef] = true
-		}
-		if len(s.Defs) > 0 && !seen[tooladapter.FeatureDefs] {
-			features = append(features, tooladapter.FeatureDefs)
-			seen[tooladapter.FeatureDefs] = true
-		}
-		if len(s.AnyOf) > 0 && !seen[tooladapter.FeatureAnyOf] {
-			features = append(features, tooladapter.FeatureAnyOf)
-			seen[tooladapter.FeatureAnyOf] = true
-		}
-		if len(s.OneOf) > 0 && !seen[tooladapter.FeatureOneOf] {
-			features = append(features, tooladapter.FeatureOneOf)
-			seen[tooladapter.FeatureOneOf] = true
-		}
-		if len(s.AllOf) > 0 && !seen[tooladapter.FeatureAllOf] {
-			features = append(features, tooladapter.FeatureAllOf)
-			seen[tooladapter.FeatureAllOf] = true
-		}
-		if s.Not != nil && !seen[tooladapter.FeatureNot] {
-			features = append(features, tooladapter.FeatureNot)
-			seen[tooladapter.FeatureNot] = true
-		}
-		if s.Pattern != "" && !seen[tooladapter.FeaturePattern] {
-			features = append(features, tooladapter.FeaturePattern)
-			seen[tooladapter.FeaturePattern] = true
-		}
-		if s.Format != "" && !seen[tooladapter.FeatureFormat] {
-			features = append(features, tooladapter.FeatureFormat)
-			seen[tooladapter.FeatureFormat] = true
-		}
-		if s.AdditionalProperties != nil && !seen[tooladapter.FeatureAdditionalProperties] {
-			features = append(features, tooladapter.FeatureAdditionalProperties)
-			seen[tooladapter.FeatureAdditionalProperties] = true
-		}
-		if s.Minimum != nil && !seen[tooladapter.FeatureMinimum] {
-			features = append(features, tooladapter.FeatureMinimum)
-			seen[tooladapter.FeatureMinimum] = true
-		}
-		if s.Maximum != nil && !seen[tooladapter.FeatureMaximum] {
-			features = append(features, tooladapter.FeatureMaximum)
-			seen[tooladapter.FeatureMaximum] = true
-		}
-		if s.MinLength != nil && !seen[tooladapter.FeatureMinLength] {
-			features = append(features, tooladapter.FeatureMinLength)
-			seen[tooladapter.FeatureMinLength] = true
-		}
-		if s.MaxLength != nil && !seen[tooladapter.FeatureMaxLength] {
-			features = append(features, tooladapter.FeatureMaxLength)
-			seen[tooladapter.FeatureMaxLength] = true
-		}
-		if len(s.Enum) > 0 && !seen[tooladapter.FeatureEnum] {
-			features = append(features, tooladapter.FeatureEnum)
-			seen[tooladapter.FeatureEnum] = true
-		}
-		if s.Const != nil && !seen[tooladapter.FeatureConst] {
-			features = append(features, tooladapter.FeatureConst)
-			seen[tooladapter.FeatureConst] = true
-		}
-		if s.Default != nil && !seen[tooladapter.FeatureDefault] {
-			features = append(features, tooladapter.FeatureDefault)
-			seen[tooladapter.FeatureDefault] = true
-		}
-
-		// Recurse into nested schemas
-		for _, prop := range s.Properties {
-			walk(prop)
-		}
-		walk(s.Items)
-		for _, def := range s.Defs {
-			walk(def)
-		}
-		for _, schema := range s.AnyOf {
-			walk(schema)
-		}
-		for _, schema := range s.OneOf {
-			walk(schema)
-		}
-		for _, schema := range s.AllOf {
-			walk(schema)
-		}
-		walk(s.Not)
+// detectSchemaFeatureLoss checks which features in a schema are not supported.
+func detectSchemaFeatureLoss(schema *tooladapter.JSONSchema, sourceName string, adapter tooladapter.Adapter) []tooladapter.FeatureLossWarning {
+	if schema == nil {
+		return nil
 	}
 
-	walk(t.InputSchema)
-	walk(t.OutputSchema)
-	return features
+	featureUsage := map[tooladapter.SchemaFeature]bool{
+		tooladapter.FeatureRef:                  schema.Ref != "",
+		tooladapter.FeatureDefs:                 len(schema.Defs) > 0,
+		tooladapter.FeatureAnyOf:                len(schema.AnyOf) > 0,
+		tooladapter.FeatureOneOf:                len(schema.OneOf) > 0,
+		tooladapter.FeatureAllOf:                len(schema.AllOf) > 0,
+		tooladapter.FeatureNot:                  schema.Not != nil,
+		tooladapter.FeaturePattern:              schema.Pattern != "",
+		tooladapter.FeatureFormat:               schema.Format != "",
+		tooladapter.FeatureAdditionalProperties: schema.AdditionalProperties != nil,
+		tooladapter.FeatureMinimum:              schema.Minimum != nil,
+		tooladapter.FeatureMaximum:              schema.Maximum != nil,
+		tooladapter.FeatureMinLength:            schema.MinLength != nil,
+		tooladapter.FeatureMaxLength:            schema.MaxLength != nil,
+		tooladapter.FeatureEnum:                 len(schema.Enum) > 0,
+		tooladapter.FeatureConst:                schema.Const != nil,
+		tooladapter.FeatureDefault:              schema.Default != nil,
+	}
+
+	var warnings []tooladapter.FeatureLossWarning
+	for feature, used := range featureUsage {
+		if used && !adapter.SupportsFeature(feature) {
+			warnings = append(warnings, tooladapter.FeatureLossWarning{
+				Feature:     feature,
+				FromAdapter: sourceName,
+				ToAdapter:   adapter.Name(),
+			})
+		}
+	}
+
+	if schema.Properties != nil {
+		for _, prop := range schema.Properties {
+			warnings = append(warnings, detectSchemaFeatureLoss(prop, sourceName, adapter)...)
+		}
+	}
+	if schema.Items != nil {
+		warnings = append(warnings, detectSchemaFeatureLoss(schema.Items, sourceName, adapter)...)
+	}
+	if schema.Defs != nil {
+		for _, def := range schema.Defs {
+			warnings = append(warnings, detectSchemaFeatureLoss(def, sourceName, adapter)...)
+		}
+	}
+	for _, s := range schema.AnyOf {
+		warnings = append(warnings, detectSchemaFeatureLoss(s, sourceName, adapter)...)
+	}
+	for _, s := range schema.OneOf {
+		warnings = append(warnings, detectSchemaFeatureLoss(s, sourceName, adapter)...)
+	}
+	for _, s := range schema.AllOf {
+		warnings = append(warnings, detectSchemaFeatureLoss(s, sourceName, adapter)...)
+	}
+	if schema.Not != nil {
+		warnings = append(warnings, detectSchemaFeatureLoss(schema.Not, sourceName, adapter)...)
+	}
+
+	return warnings
 }
