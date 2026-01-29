@@ -107,11 +107,51 @@ This plan is a strict TDD execution guide for PRD-001. Each task must follow:
 
 ## Task 6 — Documentation & quality gates
 
+- Create repo docs:
+  - `docs/index.md`
+  - `docs/design-notes.md`
+  - `docs/user-journey.md`
+- Add at least one **Mermaid** diagram showing builder/filter/exposure flow.
 - `README.md` with usage examples.
 - Run `go test ./...`.
 - Run `golangci-lint run` if configured.
 
 **Commit:** `docs(toolset): add usage docs`
+
+---
+
+## Task 7 — Stack docs integration (ai-tools-stack)
+
+**Goal:** Ensure toolset docs appear in the unified docs site with diagrams.
+
+**Steps:**
+- Add `ai-tools-stack/docs/components/toolset.md` (overview + builder examples + diagram embeds).
+- Add `toolset` to `ai-tools-stack/mkdocs.yml`:
+  - Components nav entry.
+  - Library Docs multirepo import entry.
+- Add D2 diagram:
+  - `ai-tools-stack/docs/diagrams/component-toolset.d2`
+  - Run `ai-tools-stack/scripts/render-d2.sh` to generate SVG.
+- If stack overview diagrams need an update, add a note or update `docs/architecture/overview.md`.
+- Optional preview:
+  - `ai-tools-stack/scripts/prepare-mkdocs-multirepo.sh`
+  - `mkdocs serve`
+
+**Commit:** `docs(ai-tools-stack): add toolset docs and diagrams`
+
+---
+
+## Task 8 — Version matrix propagation
+
+**Goal:** Align stack versioning with `ai-tools-stack` and propagate to repos.
+
+**Steps:**
+- Tag `toolset` with `vX.Y.Z`.
+- Update `ai-tools-stack/go.mod` to include `toolset vX.Y.Z`.
+- Run `ai-tools-stack/scripts/update-version-matrix.sh --apply`.
+- Verify `VERSIONS.md` synced into each repo.
+
+**Commit:** `chore(ai-tools-stack): add toolset to version matrix`
 
 ---
 
@@ -133,3 +173,5 @@ This plan is a strict TDD execution guide for PRD-001. Each task must follow:
 5) feat(toolset): add policy support
 6) feat(toolset): add exposure helpers
 7) docs(toolset): add usage docs
+8) docs(ai-tools-stack): add toolset docs and diagrams
+9) chore(ai-tools-stack): add toolset to version matrix
