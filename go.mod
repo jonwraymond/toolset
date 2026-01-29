@@ -2,4 +2,4 @@ module github.com/jonwraymond/toolset
 
 go 1.24.4
 
-require github.com/jonwraymond/tooladapter v0.1.0
+require github.com/jonwraymond/tooladapter v0.2.0
