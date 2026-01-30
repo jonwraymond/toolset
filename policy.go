@@ -3,6 +3,13 @@ package toolset
 import "github.com/jonwraymond/tooladapter"
 
 // Policy decides whether a tool is allowed.
+//
+// Contract:
+// - Concurrency: implementations must be safe for concurrent use after construction.
+// - Errors: implementations must encode deny via false; no panic for invalid input.
+// - Ownership: implementations must not mutate the tool; treat it as read-only.
+// - Determinism: for a given tool, Allow returns a stable result.
+// - Nil handling: if tool is nil, Allow must return false.
 type Policy interface {
 	Allow(tool *tooladapter.CanonicalTool) bool
 }
@@ -12,13 +19,16 @@ type PolicyFunc func(*tooladapter.CanonicalTool) bool
 
 // Allow implements Policy.
 func (f PolicyFunc) Allow(t *tooladapter.CanonicalTool) bool {
+	if t == nil || f == nil {
+		return false
+	}
 	return f(t)
 }
 
 // AllowAll returns a policy that allows all tools.
 func AllowAll() Policy {
 	return PolicyFunc(func(t *tooladapter.CanonicalTool) bool {
-		return true
+		return t != nil
 	})
 }
 

@@ -52,6 +52,30 @@ Use cases:
 - Enforce security categories
 - Restrict by `RequiredScopes`
 
+### Contract
+
+- **Concurrency:** policies must be safe for concurrent use after construction.
+- **Nil handling:** `Allow(nil)` must return `false`.
+- **Determinism:** results must be stable for identical inputs.
+- **Ownership:** implementations must not mutate tool data.
+
+## Registry Interface
+
+Registries provide the tool source for builders:
+
+```go
+type Registry interface {
+    Tools() []*tooladapter.CanonicalTool
+}
+```
+
+### Contract
+
+- **Concurrency:** `Tools()` may be called concurrently.
+- **Ownership:** returned slice is caller-owned; tools are read-only snapshots.
+- **Determinism:** ordering should be stable for identical registry state.
+- **Nil handling:** returning `nil` is treated as empty.
+
 ## Exposure Semantics
 
 Exposure uses `tooladapter.Adapter` to export toolsets:

@@ -24,10 +24,10 @@ func TestAllowAllPolicy(t *testing.T) {
 		}
 	})
 
-	t.Run("returns true for nil", func(t *testing.T) {
+	t.Run("denies nil", func(t *testing.T) {
 		p := AllowAll()
-		if !p.Allow(nil) {
-			t.Error("AllowAll should return true for nil")
+		if p.Allow(nil) {
+			t.Error("AllowAll should return false for nil")
 		}
 	})
 }

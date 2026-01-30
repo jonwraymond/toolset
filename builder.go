@@ -7,6 +7,12 @@ import (
 )
 
 // Registry provides tools for the builder.
+//
+// Contract:
+// - Concurrency: Tools may be called concurrently; implementations must be safe or document otherwise.
+// - Ownership: returned slice is caller-owned; tools are shared and read-only.
+// - Determinism: ordering should be deterministic for identical registry state.
+// - Nil handling: returning nil is treated as empty.
 type Registry interface {
 	Tools() []*tooladapter.CanonicalTool
 }
