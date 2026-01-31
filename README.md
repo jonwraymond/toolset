@@ -1,80 +1,38 @@
 # toolset
 
-Composable tool collection library for building curated, filtered, and access-controlled tool surfaces.
+> **DEPRECATED**: This package has been migrated to [`github.com/jonwraymond/toolcompose/set`](https://github.com/jonwraymond/toolcompose).
+>
+> Please update your imports. See [MIGRATION.md](./MIGRATION.md) for details.
 
-## Overview
+---
 
-`toolset` sits between `tooladapter` (protocol normalization) and `metatools-mcp` (server exposure). It provides:
+## Migration
 
-- **Toolset**: Thread-safe collection of canonical tools with filtering
-- **Builder**: Fluent API for constructing toolsets from registries
-- **Filters**: Reusable predicates (namespace, tags, categories, IDs)
-- **Policies**: Access control layer applied after filtering
-- **Exposure**: Export to protocol-specific formats via adapters
+This repository is no longer maintained. All functionality has been moved to the `set` package within `toolcompose`, which provides a unified approach to tool composition.
 
-## Installation
+### New Location
 
 ```bash
-go get github.com/jonwraymond/toolset
+go get github.com/jonwraymond/toolcompose
 ```
 
-## Quick Start
+Then import:
 
 ```go
-package main
-
-import (
-    "github.com/jonwraymond/toolset"
-    "github.com/jonwraymond/tooladapter"
-)
-
-func main() {
-    // Build a toolset from tools
-    ts, err := toolset.NewBuilder("my-tools").
-        FromTools(allTools).
-        WithNamespace("github").
-        WithTags([]string{"read-only"}).
-        ExcludeTools([]string{"github:delete-repo"}).
-        Build()
-    if err != nil {
-        panic(err)
-    }
-
-    // Filter further
-    filtered := ts.Filter(toolset.CategoryFilter("search"))
-
-    // Export to MCP format
-    exposure := toolset.NewExposure(filtered, mcpAdapter)
-    mcpTools, warnings, errs := exposure.ExportWithWarnings()
-    if len(errs) > 0 {
-        panic(errs[0])
-    }
-}
+import "github.com/jonwraymond/toolcompose/set"
 ```
 
-Notes:
-- `ExportWithWarnings()` returns **warnings** for feature loss and **errors** for
-  tools that failed conversion. The result slice only contains successful
-  conversions.
+### Why the Change?
 
-## Stack Position
+The `toolcompose` module consolidates tool composition functionality into a single, cohesive package:
 
-```
-toolmodel → tooladapter → toolset → metatools-mcp
-```
+- **Unified API**: Tool composition, filtering, and policies in one module
+- **Better maintainability**: Single repository for related functionality
+- **Cleaner dependencies**: Reduced module fragmentation
 
-## What This Is
+### Timeline
 
-- Pure data composition library
-- Thread-safe tool collections
-- Declarative filtering and policies
+- **Now**: This repository accepts no new features
+- **Future**: This repository will be archived
 
-## What This Is NOT
-
-- Tool execution (see `toolrun`)
-- Network I/O or external calls
-- Schema validation (see `toolmodel`)
-
-## License
-
-See repository root.
+For migration instructions, see [MIGRATION.md](./MIGRATION.md).
